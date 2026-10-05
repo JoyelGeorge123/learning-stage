@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HELIOS — 3D Solar Experience (Three.js + GSAP)</title>
+<style>
+:root{
+  --ink:#f2f7ff;
+  --muted:#a7b8d4;
+  --gold:#ffc24b;
+  --gold-2:#ff8a3d;
+  --blue:#4da6ff;
+  --cyan:#3ee6d6;
+  --line:rgba(180,205,255,.16);
+  --glass:rgba(8,14,28,.52);
+  --shadow:0 34px 90px rgba(0,0,0,.55);
+  --r:24px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:auto}
+body{
+  margin:0;background:#04060f;color:var(--ink);
+  font-family:"Segoe UI",Inter,system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+body.locked{overflow:hidden}
+canvas{display:block}
+
+/* LOADER */
+#loader{
+  position:fixed;inset:0;z-index:200;display:grid;place-content:center;justify-items:center;gap:26px;
+  background:radial-gradient(700px 500px at 50% 40%, #0d1730, #04060f 70%);
+  transition:opacity .8s ease, visibility .8s;
+}
+#loader.gone{opacity:0;visibility:hidden}
+.ld-brand{display:flex;align-items:center;gap:14px;font-weight:800;letter-spacing:.3em;font-size:14px}
+.ld-mark{
+  width:52px;height:52px;border-radius:16px;display:grid;place-items:center;font-size:22px;
+  background:conic-gradient(from 200deg,var(--gold),var(--gold-2),var(--cyan),var(--gold));
+  animation:spin 5s linear infinite;box-shadow:0 0 40px rgba(255,160,60,.35)
+}
+.ld-mark span{animation:spin 5s linear infinite reverse;display:block}
+.ld-bar{width:230px;height:3px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
+.ld-bar i{display:block;height:100%;width:12%;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--gold-2));box-shadow:0 0 16px rgba(255,160,60,.8)}
+.ld-txt{font-size:11px;letter-spacing:.26em;color:var(--muted);text-transform:uppercase}
+#fallback{display:none;text-align:center;padding:30px;color:var(--muted);font-size:14px;line-height:1.7;max-width:420px}
+
+/* STAGE + HUD + PROGRESS */
+#stage{position:fixed;inset:0;z-index:0}
+#vig{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 45%, transparent 42%, rgba(4,6,15,.72) 100%)}
+#bar{position:fixed;left:0;bottom:0;height:3px;width:100%;z-index:70;background:rgba(255,255,255,.07)}
+#bar i{display:block;height:100%;width:100%;transform:scaleX(0);transform-origin:0 50%;
+  background:linear-gradient(90deg,var(--gold),var(--gold-2),var(--cyan));box-shadow:0 0 14px rgba(255,160,60,.7)}
+.hud{
+  position:fixed;right:22px;top:96px;z-index:60;width:236px;padding:18px;border-radius:20px;
+  background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(18px);box-shadow:var(--shadow)
+}
+.hud h4{margin:0 0 12px;font-size:10px;letter-spacing:.26em;color:var(--muted);font-weight:700}
+.hud-row{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;padding:5px 0;color:#cfe0f8}
+.hud-row b{color:#fff;font-variant-numeric:tabular-nums}
+.hud-sep{height:1px;background:var(--line);margin:12px 0}
+.meter{height:5px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:6px}
+.meter i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--gold-2));transition:width .9s ease}
+.meter.blue i{background:linear-gradient(90deg,var(--blue),var(--cyan))}
+.badge{
+  position:fixed;left:22px;bottom:22px;z-index:60;font-size:10px;letter-spacing:.22em;color:var(--muted);
+  border:1px solid var(--line);padding:9px 15px;border-radius:999px;background:var(--glass);backdrop-filter:blur(14px)
+}
+.hint{
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;font-size:10.5px;letter-spacing:.24em;
+  color:var(--muted);text-transform:uppercase;display:flex;flex-direction:column;align-items:center;gap:10px
+}
+.hint em{display:block;width:1px;height:38px;background:linear-gradient(180deg,var(--gold),transparent);animation:drop 1.9s ease-in-out infinite}
+@keyframes drop{0%{opacity:0;transform:translateY(-10px)}40%{opacity:1}100%{opacity:0;transform:translateY(10px)}}
+
+/* NAV */
+header{position:fixed;top:0;left:0;right:0;z-index:80;backdrop-filter:blur(16px);
+  background:linear-gradient(180deg,rgba(4,6,15,.72),rgba(4,6,15,0));border-bottom:1px solid transparent;transition:border-color .4s,background .4s}
+header.solid{background:rgba(4,6,15,.8);border-bottom-color:var(--line)}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0;width:min(1320px,92vw);margin-inline:auto}
+.brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:.16em;font-size:14px}
+.mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:17px;position:relative;
+  background:conic-gradient(from 210deg,var(--gold),var(--gold-2),var(--cyan),var(--gold));box-shadow:0 8px 24px rgba(255,160,60,.32)}
+.mark::after{content:"";position:absolute;inset:3px;border-radius:9px;background:#060a16}
+.mark span{position:relative;z-index:2}
+.brand small{display:block;font-weight:500;letter-spacing:.24em;color:var(--muted);font-size:9px}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{color:var(--muted);text-decoration:none;font-size:14px;transition:.25s}
+.nav-links a:hover{color:#fff}
+.btn{border:0;cursor:pointer;font:inherit;font-weight:700;font-size:14px;padding:13px 24px;border-radius:999px;
+  text-decoration:none;display:inline-flex;align-items:center;gap:9px;
+  transition:transform .3s cubic-bezier(.2,.9,.3,1.4),box-shadow .3s,background .3s}
+.btn:hover{transform:translateY(-3px)}
+.btn-primary{background:linear-gradient(120deg,var(--gold),var(--gold-2));color:#20140a;box-shadow:0 14px 34px rgba(255,150,60,.32)}
+.btn-ghost{background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--line);backdrop-filter:blur(10px)}
+.btn-ghost:hover{border-color:rgba(255,194,75,.5)}
+
+/* SCROLL SECTIONS */
+.scroll{position:relative;z-index:20}
+.sec{min-height:100vh;display:flex;align-items:center;padding:100px 0}
+.wrap{width:min(1320px,92vw);margin-inline:auto}
+.glass{
+  background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.025));
+  border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(20px) saturate(150%);
+  box-shadow:var(--shadow)
+}
+.eyebrow{color:var(--gold);letter-spacing:.3em;font-size:11px;font-weight:800;text-transform:uppercase}
+h1{font-size:clamp(38px,5.4vw,74px);line-height:1.02;margin:20px 0 18px;font-weight:800;letter-spacing:-.025em}
+h2{font-size:clamp(27px,3.4vw,46px);margin:14px 0 14px;font-weight:800;letter-spacing:-.02em}
+h3{margin:0 0 10px;font-size:17px}
+.grad{background:linear-gradient(100deg,var(--gold),#fff 45%,var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub,.copy p{color:var(--muted);font-size:16px;line-height:1.78}
+.hero-card{padding:40px;max-width:600px}
+.pill{display:inline-flex;align-items:center;gap:9px;padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.05);
+  border:1px solid var(--line);font-size:11px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);animation:ping 2s infinite}
+@keyframes ping{70%{box-shadow:0 0 0 12px rgba(62,230,214,0)}100%{box-shadow:0 0 0 0 rgba(62,230,214,0)}}
+.cta-row{display:flex;gap:14px;flex-wrap:wrap;margin:28px 0 26px}
+.trust{display:flex;gap:28px;flex-wrap:wrap;font-size:12px;letter-spacing:.08em;color:var(--muted)}
+.trust b{display:block;color:#fff;font-size:16px}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;width:100%}
+.stat{padding:26px 22px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
+  border:1px solid var(--line);backdrop-filter:blur(18px);box-shadow:var(--shadow);transition:transform .35s,border-color .35s}
+.stat:hover{transform:translateY(-8px);border-color:rgba(255,194,75,.42)}
+.stat b{display:block;font-size:clamp(24px,2.8vw,36px);font-weight:800;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:12.5px}
+
+.head{max-width:720px;margin-bottom:40px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%}
+.card{padding:28px;border-radius:22px;border:1px solid var(--line);position:relative;overflow:hidden;
+  background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02));backdrop-filter:blur(18px);transition:transform .4s,border-color .4s}
+.card::before{content:"";position:absolute;inset:0;opacity:0;transition:opacity .4s;pointer-events:none;
+  background:radial-gradient(420px 220px at var(--mx,50%) var(--my,0%),rgba(255,194,75,.22),transparent 62%)}
+.card:hover{transform:translateY(-9px);border-color:rgba(255,194,75,.4)}
+.card:hover::before{opacity:1}
+.ico{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;font-size:22px;margin-bottom:16px;
+  background:linear-gradient(140deg,rgba(255,194,75,.24),rgba(77,166,255,.18));border:1px solid rgba(255,194,75,.3)}
+.card p{margin:0;color:var(--muted);font-size:14px;line-height:1.72}
+
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;width:100%}
+.step{padding:26px;border-radius:22px;border:1px solid var(--line);position:relative;overflow:hidden;
+  background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));backdrop-filter:blur(18px)}
+.step .n{font-size:42px;font-weight:800;line-height:1;margin-bottom:12px;color:transparent;-webkit-text-stroke:1.4px rgba(255,194,75,.6)}
+.step p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.68}
+
+.calc{display:grid;grid-template-columns:1.05fr .95fr;gap:34px;padding:38px;border-radius:30px;width:100%;
+  border:1px solid var(--line);background:linear-gradient(140deg,rgba(255,194,75,.12),rgba(77,166,255,.08));
+  backdrop-filter:blur(20px);box-shadow:var(--shadow)}
+.field{margin-bottom:24px}
+.field label{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:11px}
+.field label b{color:#fff;font-variant-numeric:tabular-nums}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.15);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;cursor:pointer;
+  background:linear-gradient(140deg,var(--gold),var(--gold-2));box-shadow:0 0 0 6px rgba(255,194,75,.18)}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border:0;border-radius:50%;background:var(--gold);cursor:pointer}
+.out{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tile{padding:20px;border-radius:18px;background:rgba(4,6,15,.5);border:1px solid var(--line)}
+.tile b{display:block;font-size:clamp(20px,2.4vw,30px);color:var(--gold);font-weight:800;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--muted)}
+.note{font-size:12px;color:var(--muted);line-height:1.65;margin:16px 0 0}
+
+.cta{text-align:center;padding:70px 40px;border-radius:32px;border:1px solid var(--line);width:100%;
+  background:radial-gradient(700px 320px at 50% 0%,rgba(255,194,75,.2),transparent 70%),linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+  backdrop-filter:blur(20px);box-shadow:var(--shadow)}
+.cta p{color:var(--muted);max-width:560px;margin:0 auto 28px}
+.center{width:100%;display:flex;justify-content:center}
+footer{position:relative;z-index:20;padding:34px 0 46px;background:linear-gradient(180deg,transparent,rgba(4,6,15,.9))}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.foot-links{display:flex;gap:20px}
+.foot-links a{color:var(--muted);text-decoration:none}
+.foot-links a:hover{color:#fff}
+
+.anim{opacity:1}
+body.js .anim{opacity:0}
+@media(max-width:1000px){
+  .cards,.steps{grid-template-columns:1fr 1fr}
+  .stats{grid-template-columns:1fr 1fr}
+  .calc{grid-template-columns:1fr;padding:26px}
+  .nav-links{display:none}
+  .hud{right:14px;top:84px;width:190px;padding:14px}
+  .badge{display:none}
+}
+@media(max-width:600px){
+  .cards,.steps,.stats,.out{grid-template-columns:1fr}
+  .hero-card{padding:26px}
+  .hud{position:static;width:auto;margin:16px}
+}
+</style>
+</head>
+<body class="js locked">
+
+<div id="loader">
+  <div class="ld-brand"><div class="ld-mark"><span>☀</span></div><div>HELIOS</div></div>
+  <div class="ld-bar"><i id="ldBar"></i></div>
+  <div class="ld-txt" id="ldTxt">Initialising renderer</div>
+  <div id="fallback"><b>3D engine unavailable.</b><br>This template needs WebGL and network access to load Three.js and GSAP from a CDN.</div>
+</div>
+
+<div id="stage"></div>
+<div id="vig"></div>
+<div id="bar"><i></i></div>
+
+<header id="hd">
+  <nav class="nav">
+    <div class="brand"><div class="mark"><span>☀</span></div><div>HELIOS<small>SOLAR INTELLIGENCE</small></div></div>
+    <div class="nav-links">
+      <a href="#tech">Technology</a><a href="#process">Process</a><a href="#calc">Savings</a><a href="#cta">Contact</a>
+    </div>
+    <div><a class="btn btn-primary" href="#calc">Get Free Assessment</a></div>
+  </nav>
+</header>
+
+<div class="hud">
+  <h4>LIVE ARRAY TELEMETRY</h4>
+  <div class="hud-row"><span>Sun elevation</span><b id="hElev">—</b></div>
+  <div class="meter"><i id="mElev"></i></div>
+  <div class="hud-row" style="margin-top:10px"><span>Azimuth</span><b id="hAz">—</b></div>
+  <div class="hud-row"><span>Conditions</span><b id="hWx">—</b></div>
+  <div class="hud-sep"></div>
+  <div class="hud-row"><span>Array output</span><b id="hOut">—</b></div>
+  <div class="meter blue"><i id="mOut"></i></div>
+  <div class="hud-row" style="margin-top:10px"><span>Tracker angle</span><b id="hTrk">—</b></div>
+  <div class="hud-row"><span>Status</span><b id="hSt">—</b></div>
+</div>
+
+<div class="badge">THREE.JS WEBGL · GSAP SCROLLTRIGGER</div>
+<div class="hint">Scroll to explore<em></em></div>
+
+<main class="scroll" id="scroll">
+
+  <section class="sec" data-h="100">
+    <div class="wrap">
+      <div class="glass hero-card anim">
+        <div class="pill"><span class="dot"></span> 2.4 GW under management</div>
+        <h1>Harvest the sun.<br><span class="grad">Engineer the future.</span></h1>
+        <p>Helios designs, installs and intelligence-manages high-yield solar systems — engineered around your roof, your tariff and your weather, then tuned to harvest every ray.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#cta">⚡ Start Free Survey</a>
+          <a class="btn btn-ghost" href="#tech">Explore Technology</a>
+        </div>
+        <div class="trust">
+          <div><b>25 yr</b>Warranty</div>
+          <div><b>98.7%</b>Uptime</div>
+          <div><b>Zero</b>Upfront penalty</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" data-h="60">
+    <div class="wrap">
+      <div class="stats">
+        <div class="stat anim"><b data-count="2.4" data-dec="1" data-suffix=" GW">0</b><span>Capacity installed</span></div>
+        <div class="stat anim"><b data-count="38000" data-suffix="+">0</b><span>Homes powered</span></div>
+        <div class="stat anim"><b data-count="1.2" data-dec="1" data-suffix="M t">0</b><span>CO₂ avoided yearly</span></div>
+        <div class="stat anim"><b data-count="31" data-suffix="%">0</b><span>Average bill cut</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="tech" data-h="110">
+    <div class="wrap">
+      <div class="head anim">
+        <div class="eyebrow">The Technology</div>
+        <h2>A system that thinks in sunlight</h2>
+        <p>Every layer is tuned for maximum yield — from the atomic layer of the cell to the AI that reads tomorrow's weather.</p>
+      </div>
+      <div class="cards">
+        <div class="card anim"><div class="ico">🎯</div><h3>AI Sun Tracking</h3><p>Dual-axis trackers sweep every panel through 340° of arc, following the sun from first light to last for up to 22% more energy than static mounts.</p></div>
+        <div class="card anim"><div class="ico">🔋</div><h3>Microinverter Mesh</h3><p>One optimizer per panel means no single point of failure. Shade on one section never drags down the performance of another.</p></div>
+        <div class="card anim"><div class="ico">⚡</div><h3>Peak-Shift Storage</h3><p>Lithium storage charges at midday and discharges into your highest tariff window, cutting the peak that dominates most bills.</p></div>
+        <div class="card anim"><div class="ico">🛰️</div><h3>Live Monitoring</h3><p>Panel-level telemetry streams to your phone. Anomalies are flagged before they become downtime, exports filed automatically.</p></div>
+        <div class="card anim"><div class="ico">🛡️</div><h3>25-Year Warranty</h3><p>25-year performance warranty on output, 10-year workmanship cover and zero-maintenance hardware rated for coastal duty.</p></div>
+        <div class="card anim"><div class="ico">⚙️</div><h3>Rapid Deployment</h3><p>Drone-assisted survey and prefabricated rails mean most residential installations complete in a single working day.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="process" data-h="100">
+    <div class="wrap">
+      <div class="head anim">
+        <div class="eyebrow">How It Works</div>
+        <h2>From survey to sun in four steps</h2>
+        <p>No guesswork, no obligation. We measure, model, build and hand you a dashboard you actually understand.</p>
+      </div>
+      <div class="steps">
+        <div class="step anim"><div class="n">01</div><h4>Free Site Survey</h4><p>A certified engineer measures roof geometry, structural load and shading — by drone and by hand.</p></div>
+        <div class="step anim"><div class="n">02</div><h4>Custom System Design</h4><p>You receive a 3D render of your array, an hour-by-hour production model and a fixed price.</p></div>
+        <div class="step anim"><div class="n">03</div><h4>Professional Install</h4><p>Our own crews, not subcontractors. Permits, interconnection and commissioning handled end to end.</p></div>
+        <div class="step anim"><div class="n">04</div><h4>Track Every Watt</h4><p>Go live on day one with a private dashboard, savings alerts and automatic export filing.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="calc" data-h="100">
+    <div class="wrap">
+      <div class="head anim">
+        <div class="eyebrow">Savings Model</div>
+        <h2>Estimate your return</h2>
+      </div>
+      <div class="calc anim">
+        <div>
+          <div class="field"><label>Monthly electricity bill <b id="billOut">₹6,500</b></label>
+            <input type="range" id="bill" min="1000" max="40000" step="500" value="6500" /></div>
+          <div class="field"><label>Usable roof area <b id="areaOut">60 m²</b></label>
+            <input type="range" id="area" min="10" max="400" step="5" value="60" /></div>
+          <div class="field"><label>Monthly consumption <b id="useOut">750 kWh</b></label>
+            <input type="range" id="use" min="100" max="3000" step="25" value="750" /></div>
+          <p class="note">Indicative only. A site survey replaces this model with verified shading, tariff and structural data.</p>
+        </div>
+        <div>
+          <div class="out">
+            <div class="tile"><b id="oKw">4.9 kW</b><span>Recommended system size</span></div>
+            <div class="tile"><b id="oPanels">25</b><span>Panels required</span></div>
+            <div class="tile"><b id="oGen">1,530 kWh</b><span>Monthly generation</span></div>
+            <div class="tile"><b id="oSave">₹4,180</b><span>Estimated monthly saving</span></div>
+          </div>
+          <div style="margin-top:22px"><a class="btn btn-primary" href="#cta">Lock In This Estimate</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="cta" data-h="80">
+    <div class="wrap center">
+      <div class="cta anim">
+        <div class="eyebrow">Ready When You Are</div>
+        <h2>Put your roof to work</h2>
+        <p>Free engineering-grade site survey, a 3D design of your system and a fixed price — with no obligation to proceed.</p>
+        <div class="cta-row" style="justify-content:center">
+          <a class="btn btn-primary" href="#">⚡ Book My Survey</a>
+          <a class="btn btn-ghost" href="#">Talk to an Engineer</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>© 2026 Helios Solar Intelligence · 3D design template</div>
+    <div class="foot-links"><a href="#">Privacy</a><a href="#">Warranty</a><a href="#">Support</a><a href="#">Contact</a></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+const loader = document.getElementById('loader');
+const ldBar = document.getElementById('ldBar');
+const ldTxt = document.getElementById('ldTxt');
+const setLoad = (p, t) => { ldBar.style.width = p + '%'; ldTxt.textContent = t; };
+
+function fail(msg){
+  document.getElementById('fallback').style.display = 'block';
+  ldTxt.textContent = 'Unable to start';
+  console.error(msg);
+}
+
+async function boot(){
+  if(!window.gsap || !window.ScrollTrigger) throw new Error('GSAP missing');
+  gsap.registerPlugin(ScrollTrigger);
+  const THREE = await import('three');
+  setLoad(25, 'Building terrain');
+
+  const host = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.06;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  host.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0xa9c8e8, 0.0042);
+
+  const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.5, 1200);
+  const cam = { x:0, y:18, z:58 };
+  const look = { x:0, y:6, z:0 };
+  const par = { x:0, y:0 };
+
+  /* ---------- SKY ---------- */
+  const sunDir = new THREE.Vector3(0.4, 0.7, 0.55).normalize();
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(620, 40, 24),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite:false, fog:false,
+      uniforms:{ uSun:{ value:sunDir }, uTop:{ value:new THREE.Color(0x0a1730) }, uHorizon:{ value:new THREE.Color(0xffd7a0) }, uDay:{ value:1 } },
+      vertexShader:`varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader:`
+        uniform vec3 uSun,uTop,uHorizon; uniform float uDay; varying vec3 vD;
+        void main(){
+          float h = clamp(vD.y*1.15+0.05, 0.0, 1.0);
+          vec3 col = mix(uHorizon, uTop, pow(h,0.55));
+          float d = max(dot(normalize(vD), normalize(uSun)), 0.0);
+          col += vec3(1.0,0.78,0.42) * pow(d, 34.0) * 0.85 * uDay;
+          col += vec3(1.0,0.62,0.28) * pow(d, 6.0) * 0.16 * uDay;
+          col = mix(col, vec3(0.05,0.07,0.13), (1.0-uDay)*0.55);
+          gl_FragColor = vec4(col,1.0);
+        }`
+    })
+  );
+  sky.renderOrder = -1;
+  scene.add(sky);
+
+  /* ---------- SUN ---------- */
+  const sunSpriteTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(128,128,0,128,128,128);
+    g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.18,'rgba(255,238,190,.95)');
+    g.addColorStop(.42,'rgba(255,178,80,.42)'); g.addColorStop(1,'rgba(255,140,40,0)');
+    x.fillStyle = g; x.fillRect(0,0,256,256);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const sunBall = new THREE.Mesh(
+    new THREE.SphereGeometry(14, 32, 24),
+    new THREE.MeshBasicMaterial({ color:0xfff3cf, fog:false })
+  );
+  const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map:sunSpriteTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, fog:false }));
+  sunGlow.scale.setScalar(230);
+  scene.add(sunBall, sunGlow);
+
+  const sunLight = new THREE.DirectionalLight(0xffe2b0, 2.4);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.near = 20; sunLight.shadow.camera.far = 260;
+  sunLight.shadow.camera.left = -70; sunLight.shadow.camera.right = 70;
+  sunLight.shadow.camera.top = 70; sunLight.shadow.camera.bottom = -70;
+  sunLight.shadow.bias = -0.0006;
+  scene.add(sunLight, sunLight.target);
+  scene.add(new THREE.HemisphereLight(0xbcd8ff, 0x2c3d24, 0.75));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.16));
+
+  /* ---------- TERRAIN ---------- */
+  const hash = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const noise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const u = t => t * t * (3 - 2 * t);
+    const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+    return (a * (1 - u(xf)) + b * u(xf)) * (1 - u(yf)) + (c * (1 - u(xf)) + d * u(xf)) * u(yf);
+  };
+  const groundY = (x, z) =>
+    (noise(x * 0.012, z * 0.012) * 8 - 2.4) * Math.exp(-(x * x + z * z) / 9000) +
+    (noise(x * 0.05 + 9, z * 0.05 + 4) * 1.6 - 0.8);
+
+  const geo = new THREE.PlaneGeometry(520, 520, 150, 150);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const cA = new THREE.Color(0x3d6b32), cB = new THREE.Color(0x86a552), cC = new THREE.Color(0x2f5327), cD = new THREE.Color(0x9a8f6a);
+  for(let i = 0; i < pos.count; i++){
+    const x = pos.getX(i), z = pos.getZ(i);
+    const y = groundY(x, z);
+    pos.setY(i, y);
+    const t = Math.min(1, Math.max(0, (y + 3) / 9));
+    const c = cA.clone().lerp(cB, t).lerp(cC, noise(x * 0.09, z * 0.09) * 0.35);
+    if(t < 0.22) c.lerp(cD, (0.22 - t) * 2.2);
+    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.96, metalness:0, flatShading:true }));
+  ground.receiveShadow = true;
+  scene.add(ground);
+  setLoad(45, 'Raising solar array');
+
+  /* ---------- SOLAR FARM ---------- */
+  const cellTex = (() => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 160;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 256, 160);
+    g.addColorStop(0, '#1b3d70'); g.addColorStop(.55, '#10224a'); g.addColorStop(1, '#0a1a36');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 160);
+    const cols = 6, rows = 4, pad = 7, gap = 3;
+    const cw = (256 - pad * 2 - gap * (cols - 1)) / cols, ch = (160 - pad * 2 - gap * (rows - 1)) / rows;
+    for(let r = 0; r < rows; r++) for(let k = 0; k < cols; k++){
+      const cx = pad + k * (cw + gap), cy = pad + r * (ch + gap);
+      const cg = x.createLinearGradient(cx, cy, cx + cw, cy + ch);
+      cg.addColorStop(0, '#315fa8'); cg.addColorStop(1, '#102a52');
+      x.fillStyle = cg; x.fillRect(cx, cy, cw, ch);
+      x.strokeStyle = 'rgba(190,225,255,.5)'; x.lineWidth = 1.4;
+      x.strokeRect(cx + .7, cy + .7, cw - 1.4, ch - 1.4);
+      x.strokeStyle = 'rgba(225,240,255,.3)'; x.lineWidth = 1;
+      for(let b = 1; b < 4; b++){ x.beginPath(); x.moveTo(cx + cw * b / 4, cy); x.lineTo(cx + cw * b / 4, cy + ch); x.stroke(); }
+    }
+    x.strokeStyle = '#d3dcea'; x.lineWidth = 7; x.strokeRect(3.5, 3.5, 249, 153);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  })();
+
+  const panelMat = new THREE.MeshStandardMaterial({ map:cellTex, roughness:0.28, metalness:0.55, emissive:0x0a1c33, emissiveIntensity:0.55 });
+  const frameMat = new THREE.MeshStandardMaterial({ color:0xd8e2ee, roughness:0.35, metalness:0.8 });
+  const postMat  = new THREE.MeshStandardMaterial({ color:0xb9c6d6, roughness:0.45, metalness:0.75 });
+  const panelGeo = new THREE.PlaneGeometry(4.1, 2.55);
+  panelGeo.rotateX(-Math.PI / 2);
+  const frameGeo = new THREE.BoxGeometry(4.26, 0.12, 2.7);
+  const postGeo  = new THREE.CylinderGeometry(0.11, 0.15, 1.9, 10);
+
+  const trackers = [];
+  const farm = new THREE.Group();
+  scene.add(farm);
+  const ROWS = 6, COLS = 7, SX = 5.4, SZ = 4.4, Z0 = -12;
+  for(let r = 0; r < ROWS; r++) for(let c = 0; c < COLS; c++){
+    const x = (c - (COLS - 1) / 2) * SX;
+    const z = Z0 + r * SZ;
+    const gy = groundY(x, z);
+    const pivot = new THREE.Group();
+    pivot.position.set(x, gy + 2.0, z);
+    const panel = new THREE.Mesh(panelGeo, panelMat);
+    panel.position.y = 0.08; panel.castShadow = true; panel.receiveShadow = true;
+    const frame = new THREE.Mesh(frameGeo, frameMat);
+    frame.position.y = 0.02; frame.castShadow = true;
+    const post = new THREE.Mesh(postGeo, postMat);
+    post.position.y = -0.98; post.castShadow = true;
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 0.22, 10), postMat);
+    foot.position.y = -1.86; foot.receiveShadow = true;
+    pivot.add(panel, frame, post, foot);
+    farm.add(pivot);
+    trackers.push({ pivot, phase:(r * COLS + c) * 0.16 });
+  }
+
+  /* ---------- HOUSE + STORAGE ---------- */
+  const house = new THREE.Group();
+  const wallMat = new THREE.MeshStandardMaterial({ color:0xf0ece2, roughness:0.85 });
+  const roofMat = new THREE.MeshStandardMaterial({ color:0x6d4436, roughness:0.8, flatShading:true });
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(11, 4.6, 8), wallMat);
+  walls.position.y = 2.3; walls.castShadow = walls.receiveShadow = true;
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(8.4, 3.6, 4), roofMat);
+  roof.position.y = 6.3; roof.rotation.y = Math.PI / 4; roof.castShadow = true;
+  house.add(walls, roof);
+  const roofPanels = new THREE.Group();
+  for(let i = 0; i < 3; i++){
+    const rp = new THREE.Mesh(panelGeo, panelMat);
+    rp.scale.setScalar(0.72);
+    rp.position.set((i - 1) * 3.1, 6.9, 0.6);
+    rp.rotation.x = -0.42; rp.rotation.y = 0.12;
+    rp.castShadow = true;
+    roofPanels.add(rp);
+  }
+  house.add(roofPanels);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.4, 1.6), new THREE.MeshStandardMaterial({ color:0x3d2a1f, roughness:0.7 }));
+  door.position.set(5.55, 1.2, 0); house.add(door);
+  house.position.set(20, groundY(20, -22), -22);
+  scene.add(house);
+
+  const batt = new THREE.Group();
+  const bBody = new THREE.Mesh(new THREE.BoxGeometry(6.4, 2.8, 2.6), new THREE.MeshStandardMaterial({ color:0x2b3444, roughness:0.5, metalness:0.5 }));
+  bBody.position.y = 1.4; bBody.castShadow = bBody.receiveShadow = true;
+  const bGlow = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.16, 2.7), new THREE.MeshBasicMaterial({ color:0x3ee6d6 }));
+  bGlow.position.y = 2.45;
+  batt.add(bBody, bGlow);
+  batt.position.set(11, groundY(11, -20), -20);
+  scene.add(batt);
+  setLoad(62, 'Placing wind turbine');
+
+  /* ---------- WIND TURBINE ---------- */
+  const turbine = new THREE.Group();
+  const tPole = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.9, 26, 14), new THREE.MeshStandardMaterial({ color:0xf2f5f8, roughness:0.6 }));
+  tPole.position.y = 13; tPole.castShadow = true;
+  const tHub = new THREE.Group();
+  const nacelle = new THREE.Mesh(new THREE.CapsuleGeometry(0.85, 2.4, 6, 12), new THREE.MeshStandardMaterial({ color:0xe6ecf2, roughness:0.5 }));
+  nacelle.rotation.z = Math.PI / 2; nacelle.position.x = 1;
+  tHub.add(nacelle);
+  for(let i = 0; i < 3; i++){
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.5, 9.5, 0.22), new THREE.MeshStandardMaterial({ color:0xf7fafc, roughness:0.4 }));
+    blade.position.y = 5.2;
+    const arm = new THREE.Group();
+    arm.rotation.z = (i / 3) * Math.PI * 2;
+    arm.add(blade);
+    tHub.add(arm);
+  }
+  tHub.position.set(0, 25.4, 0);
+  turbine.add(tPole, tHub);
+  turbine.position.set(-24, groundY(-24, -26), -26);
+  scene.add(turbine);
+
+  /* ---------- POWER LINES ---------- */
+  const poleMat = new THREE.MeshStandardMaterial({ color:0x8b7f6e, roughness:0.9 });
+  const wireMat = new THREE.LineBasicMaterial({ color:0x22303f, transparent:true, opacity:0.55 });
+  for(let i = 0; i < 4; i++){
+    const px = -34 + i * 17, pz = -40 - i * 2;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 13, 8), poleMat);
+    pole.position.set(px, groundY(px, pz) + 6.5, pz);
+    pole.castShadow = true;
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.3, 0.3), poleMat);
+    bar.position.set(px, groundY(px, pz) + 12, pz);
+    scene.add(pole, bar);
+    if(i < 3){
+      const nx = px + 17, nz = pz - 2;
+      for(const o of [-1.6, 0, 1.6]){
+        const a = new THREE.Vector3(px + o, groundY(px, pz) + 12, pz);
+        const b = new THREE.Vector3(nx + o, groundY(nx, nz) + 12, nz);
+        const mid = a.clone().lerp(b, 0.5); mid.y -= 2.2;
+        const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(24)), wireMat));
+      }
+    }
+  }
+  setLoad(76, 'Growing landscape');
+
+  /* ---------- TREES, ROCKS, CLOUDS ---------- */
+  const trunkMat = new THREE.MeshStandardMaterial({ color:0x5b4029, roughness:1 });
+  const leafMat = new THREE.MeshStandardMaterial({ color:0x2f6b32, roughness:1, flatShading:true });
+  const trunkGeo = new THREE.CylinderGeometry(0.22, 0.32, 2.2, 7);
+  const leafGeo = new THREE.ConeGeometry(1.5, 4.4, 8);
+  for(let i = 0; i < 34; i++){
+    const a = (i / 34) * Math.PI * 2 + hash(i, 3) * 0.5;
+    const rad = 34 + hash(i, 7) * 62;
+    const x = Math.cos(a) * rad, z = Math.sin(a) * rad * 0.9;
+    if(Math.abs(x) < 32 && z > -18 && z < 16) continue;
+    const s = 0.7 + hash(i, 11) * 0.9;
+    const g = new THREE.Group();
+    const tr = new THREE.Mesh(trunkGeo, trunkMat); tr.position.y = 1.1; tr.castShadow = true;
+    const lf = new THREE.Mesh(leafGeo, leafMat); lf.position.y = 4; lf.castShadow = true;
+    g.add(tr, lf);
+    g.position.set(x, groundY(x, z), z);
+    g.scale.setScalar(s);
+    g.rotation.y = hash(i, 13) * 6.28;
+    scene.add(g);
+  }
+  const rockMat = new THREE.MeshStandardMaterial({ color:0x8e8b82, roughness:1, flatShading:true });
+  for(let i = 0; i < 14; i++){
+    const a = hash(i, 21) * 6.28, rad = 26 + hash(i, 23) * 40;
+    const x = Math.cos(a) * rad, z = Math.sin(a) * rad * 0.8;
+    const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.7 + hash(i, 25) * 1.4, 0), rockMat);
+    r.position.set(x, groundY(x, z) + 0.2, z);
+    r.rotation.set(hash(i, 27) * 3, hash(i, 29) * 3, 0);
+    r.castShadow = r.receiveShadow = true;
+    scene.add(r);
+  }
+
+  const cloudMat = new THREE.MeshLambertMaterial({ color:0xffffff, transparent:true, opacity:0.72, flatShading:true });
+  const cloudGeo = new THREE.SphereGeometry(1, 10, 7);
+  const clouds = [];
+  for(let i = 0; i < 7; i++){
+    const g = new THREE.Group();
+    const lumps = 4 + Math.floor(hash(i, 31) * 3);
+    for(let k = 0; k < lumps; k++){
+      const m = new THREE.Mesh(cloudGeo, cloudMat);
+      m.position.set(k * 4.4 - lumps * 2, hash(i + k, 33) * 1.6, hash(i, k) * 3);
+      m.scale.set(3.4 + hash(i, k) * 2.4, 1.7 + hash(i + k, 5) * 1.2, 2.6);
+      g.add(m);
+    }
+    g.position.set(-140 + i * 46 + hash(i, 41) * 20, 46 + hash(i, 43) * 26, -120 + hash(i, 47) * 90);
+    g.scale.setScalar(1.2 + hash(i, 51) * 1.4);
+    scene.add(g);
+    clouds.push(g);
+  }
+
+  /* ---------- ENERGY FLOW ---------- */
+  const flowCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-2, 2.4, -2),
+    new THREE.Vector3(6, 3.2, -8),
+    new THREE.Vector3(14, 3.0, -16),
+    new THREE.Vector3(19, 4.4, -20)
+  ]);
+  const orbTex = sunSpriteTex;
+  const orbs = [];
+  for(let i = 0; i < 9; i++){
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:orbTex, color:0xffc24b, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+    s.scale.setScalar(2.2);
+    scene.add(s);
+    orbs.push({ s, t:i / 9 });
+  }
+  const ringGeo = new THREE.RingGeometry(6, 6.5, 64);
+  for(let i = 0; i < 3; i++){
+    const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color:0xffc24b, transparent:true, opacity:0.4, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, depthWrite:false }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(0, groundY(0, 0) + 0.12, 0);
+    scene.add(m);
+    gsap.to(m.scale, { x:4.5, y:4.5, duration:3.4, repeat:-1, delay:i * 1.13, ease:'power1.out' });
+    gsap.to(m.material, { opacity:0, duration:3.4, repeat:-1, delay:i * 1.13, ease:'power1.out' });
+  }
+
+  const dustGeo = new THREE.BufferGeometry();
+  const DUST = 420, dp = new Float32Array(DUST * 3);
+  for(let i = 0; i < DUST; i++){
+    dp[i * 3] = (Math.random() - .5) * 190;
+    dp[i * 3 + 1] = Math.random() * 46;
+    dp[i * 3 + 2] = (Math.random() - .5) * 190;
+  }
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+  const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ size:0.55, color:0xffe0a8, transparent:true, opacity:0.5, blending:THREE.AdditiveBlending, depthWrite:false }));
+  scene.add(dust);
+  setLoad(90, 'Calibrating trackers');
+
+  /* ---------- SOLAR CLOCK ---------- */
+  const hElev = document.getElementById('hElev'), hAz = document.getElementById('hAz'), hWx = document.getElementById('hWx');
+  const hOut = document.getElementById('hOut'), hTrk = document.getElementById('hTrk'), hSt = document.getElementById('hSt');
+  const mElev = document.getElementById('mElev'), mOut = document.getElementById('mOut');
+  const HOUR = 0.2618;
+  let el = 0.6, az = 1.9;
+
+  function solarClock(){
+    const now = new Date();
+    const hrs = now.getHours() + now.getMinutes() / 60;
+    el = Math.max(0, Math.sin((hrs - 6) / 12 * Math.PI)) * 1.05;
+    az = 1.66 + ((hrs - 6) / 12) * Math.PI * 0.72;
+    const day = Math.min(1, el / 1.05 * 1.5);
+    const kW = (Math.sin(el) * 11.4).toFixed(2);
+    hElev.textContent = (el / HOUR).toFixed(1) + '°';
+    hAz.textContent = ((az * 180 / Math.PI) % 360).toFixed(0) + '°';
+    hOut.textContent = kW + ' kW';
+    hTrk.textContent = (el / HOUR).toFixed(0) + '° tilt';
+    hSt.textContent = el > 0.03 ? 'Generating' : 'Standby';
+    hWx.textContent = el > 0.03 ? 'Clear · ' + (22 + Math.round(el * 9)) + '°C' : 'Night · 18°C';
+    mElev.style.width = Math.min(100, el / 1.05 * 100) + '%';
+    mOut.style.width = Math.min(100, Math.sin(el) * 100) + '%';
+
+    sunDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
+    sky.material.uniforms.uDay.value = Math.min(1, 0.25 + el);
+    sunLight.intensity = 0.35 + el * 2.6;
+    scene.fog.color.setHSL(0.09 + el * 0.03, 0.42 - el * 0.12, 0.72 - el * 0.34);
+    trackers.forEach(t => { t.pivot.rotation.y = az + t.phase * 0.004; });
+  }
+  solarClock();
+  setInterval(solarClock, 20000);
+
+  gsap.to(tHub.rotation, { z:'+=360', duration:7.5, repeat:-1, ease:'none' });
+  gsap.to(bGlow.material, { opacity:0.35, duration:1.1, repeat:-1, yoyo:true, ease:'sine.inOut' });
+  gsap.to(dust.rotation, { y:0.06, duration:26, repeat:-1, ease:'none' });
+  clouds.forEach((c, i) => gsap.to(c.position, { x:'+=190', duration:150 + i * 22, repeat:-1, ease:'none' }));
+
+  /* ---------- CAMERA TIMELINE ---------- */
+  const secs = [...document.querySelectorAll('.sec')];
+  secs.forEach(s => s.style.minHeight = s.dataset.h + 'vh');
+  const heights = secs.map(s => +s.dataset.h);
+  const total = heights.reduce((a, b) => a + b, 0);
+  const at = [];
+  let acc = 0;
+  heights.forEach(h => { at.push(acc / total * 100); acc += h; });
+  at.push(100);
+
+  const keys = [
+    { p:[0, 17, 60],       l:[0, 6, -2] },
+    { p:[-30, 8, 34],      l:[-8, 5, -4] },
+    { p:[-7, 2.9, 19],     l:[1, 3.4, -6] },
+    { p:[17, 5.5, 20],     l:[8, 3.5, -10] },
+    { p:[27, 6.5, -6],     l:[17, 3.2, -20] },
+    { p:[-8, 11, -30],     l:[-22, 12, -25] },
+    { p:[34, 24, -26],     l:[8, 5, -12] },
+    { p:[0, 56, 84],       l:[0, 0, -4] }
+  ];
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!reduce){
+    const camTl = gsap.timeline({
+      scrollTrigger:{ trigger:'#scroll', start:'top top', end:'bottom bottom', scrub:0.8 }
+    });
+    keys.forEach((k, i) => {
+      const d = i === 0 ? heights[0] : heights[i] * 0.92;
+      camTl.to(cam, { x:k.p[0], y:k.p[1], z:k.p[2], duration:d, ease:'none' }, at[i]);
+      camTl.to(look, { x:k.l[0], y:k.l[1], z:k.l[2], duration:d, ease:'none' }, at[i]);
+    });
+
+    secs.forEach(sec => {
+      const items = sec.querySelectorAll('.anim');
+      const tl = gsap.timeline({
+        scrollTrigger:{ trigger:sec, start:'top 78%', end:'bottom 18%', scrub:0.6 }
+      });
+      tl.fromTo(items, { autoAlpha:0, y:70 }, { autoAlpha:1, y:0, stagger:0.07, duration:0.5, ease:'power2.out' })
+        .to(items, { autoAlpha:0, y:-50, stagger:0.05, duration:0.34, ease:'power2.in' }, 1.55);
+    });
+  } else {
+    gsap.set('.anim', { autoAlpha:1, y:0 });
+  }
+
+  ScrollTrigger.create({
+    trigger:'#scroll', start:'top top', end:'bottom bottom',
+    onUpdate:st => {
+      document.querySelector('#bar i').style.transform = 'scaleX(' + st.progress + ')';
+      document.getElementById('hd').classList.toggle('solid', st.scroll() > 40);
+    }
+  });
+
+  /* ---------- UI LOGIC ---------- */
+  const fmt = n => Math.round(n).toLocaleString('en-IN');
+  const bill = document.getElementById('bill'), area = document.getElementById('area'), use = document.getElementById('use');
+  function calc(){
+    const b = +bill.value, a = +area.value, u = +use.value;
+    document.getElementById('billOut').textContent = '₹' + fmt(b);
+    document.getElementById('areaOut').textContent = a + ' m²';
+    document.getElementById('useOut').textContent = fmt(u) + ' kWh';
+    const panels = Math.max(4, Math.min(120, Math.floor(a / 2.4)));
+    const gen = Math.round(panels * 0.29 * 30);
+    const saved = Math.min(gen, u) * (b / Math.max(u, 1));
+    document.getElementById('oKw').textContent = (panels * 0.55).toFixed(1) + ' kW';
+    document.getElementById('oPanels').textContent = panels;
+    document.getElementById('oGen').textContent = fmt(gen) + ' kWh';
+    document.getElementById('oSave').textContent = '₹' + fmt(saved) + ' (' + Math.round(saved / b * 100) + '%)';
+  }
+  [bill, area, use].forEach(e => e.addEventListener('input', calc));
+  calc();
+
+  document.querySelectorAll('.card').forEach(c => c.addEventListener('mousemove', e => {
+    const r = c.getBoundingClientRect();
+    c.style.setProperty('--mx', (e.clientX - r.left) / r.width * 100 + '%');
+    c.style.setProperty('--my', (e.clientY - r.top) / r.height * 100 + '%');
+  }));
+
+  ScrollTrigger.create({
+    trigger:'.stats', start:'top 85%', once:true,
+    onEnter:() => document.querySelectorAll('[data-count]').forEach(n => {
+      const target = parseFloat(n.dataset.count), dec = +(n.dataset.dec || 0), suf = n.dataset.suffix || '';
+      const o = { v:0 };
+      gsap.to(o, { v:target, duration:1.6, ease:'power3.out',
+        onUpdate:() => n.textContent = (dec ? o.v.toFixed(dec) : fmt(o.v)) + suf });
+    })
+  });
+
+  addEventListener('pointermove', e => {
+    par.x = (e.clientX / innerWidth - .5) * 2.4;
+    par.y = (e.clientY / innerHeight - .5) * -1.6;
+  }, { passive:true });
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    ScrollTrigger.refresh();
+  });
+
+  /* ---------- RENDER LOOP ---------- */
+  const tmp = new THREE.Vector3();
+  gsap.ticker.add(() => {
+    const t = gsap.ticker.time;
+    camera.position.set(cam.x + par.x, cam.y + par.y + Math.sin(t * 0.28) * 0.7, cam.z + Math.cos(t * 0.22) * 0.7);
+    camera.lookAt(tmp.set(look.x + par.x * 0.25, look.y + par.y * 0.25, look.z));
+
+    sunBall.position.copy(sunDir).multiplyScalar(300);
+    sunGlow.position.copy(sunBall.position);
+    sunLight.position.copy(sunDir).multiplyScalar(120);
+    sunLight.target.position.set(0, 0, -8);
+    trackers.forEach(tr => { tr.pivot.rotation.x = -Math.min(1.28, el + 0.06); });
+
+    orbs.forEach(o => {
+      const p = (o.t + t * 0.14) % 1;
+      const q = flowCurve.getPointAt(p);
+      o.s.position.copy(q);
+      o.s.material.opacity = Math.sin(p * Math.PI) * 0.95;
+      o.s.scale.setScalar(1.6 + Math.sin(p * Math.PI) * 1.6);
+    });
+
+    renderer.render(scene, camera);
+  });
+
+  setLoad(100, 'Ready');
+  await new Promise(r => setTimeout(r, 320));
+  document.body.classList.remove('locked');
+  loader.classList.add('gone');
+  ScrollTrigger.refresh();
+}
+
+boot().catch(err => { fail(err); document.getElementById('fallback').style.display = 'block'; });
+</script>
+</body>
+</html>
